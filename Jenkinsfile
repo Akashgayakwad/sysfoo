@@ -1,12 +1,13 @@
 pipeline {
-  agent {
-    docker {
-      image 'maven:3.6.3-jdk-11-slim'
-    }
-
-  }
+  agent any
   stages {
     stage('build') {
+      agent {
+        docker {
+          image 'maven:3.6.3-jdk-11-slim'
+        }
+
+      }
       steps {
         echo 'step 1'
         sh 'mvn compile'
@@ -14,6 +15,12 @@ pipeline {
     }
 
     stage('test') {
+      agent {
+        docker {
+          image 'maven:3.6.3-jdk-11-slim'
+        }
+
+      }
       steps {
         echo 'step 2'
         sh 'mvn clean test'
@@ -21,10 +28,38 @@ pipeline {
     }
 
     stage('package') {
-      steps {
-        echo 'step 3'
-        sh 'mvn package -DskipTests'
-        archiveArtifacts 'target/*.war'
+      when { 
+        branch 'master' 
+      }
+      parallel {
+        stage('package') {
+          agent {
+            docker {
+              image 'maven:3.6.3-jdk-11-slim'
+            }
+
+          }
+          steps {
+            echo 'step 3'
+            sh 'mvn package -DskipTests'
+            archiveArtifacts 'target/*.war'
+          }
+        }
+
+        stage('docker B&P') {
+          steps {
+            script {
+              docker.withRegistry('https://index.docker.io/v1/', 'dockerlogin') {
+                def dockerImage = docker.build("akashgayakwad/sysfoo:${env.GIT_COMMIT}${env.BUILD_ID}", "./")
+                dockerImage.push()
+                dockerImage.push("latest")
+                dockerImage.push("dev")
+              }
+            }
+
+          }
+        }
+
       }
     }
 
